@@ -1,0 +1,835 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+
+    <meta
+        name="viewport"
+        content="width=device-width, initial-scale=1.0"
+    >
+
+    <meta
+        name="apple-mobile-web-app-capable"
+        content="yes"
+    >
+
+    <meta
+        name="apple-mobile-web-app-status-bar-style"
+        content="default"
+    >
+
+    <title>Focus Tasks</title>
+
+    <style>
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+            background: #f3f4f6;
+            color: #111827;
+            font-family:
+                -apple-system,
+                BlinkMacSystemFont,
+                "Segoe UI",
+                sans-serif;
+        }
+
+        .page {
+            width: min(100%, 580px);
+            margin: 0 auto;
+            padding: 20px 16px 50px;
+        }
+
+        .header {
+            margin-bottom: 18px;
+        }
+
+        h1 {
+            margin: 0;
+            font-size: 30px;
+        }
+
+        .subtitle {
+            margin: 6px 0 0;
+            color: #6b7280;
+        }
+
+        .card {
+            background: white;
+            border-radius: 18px;
+            padding: 18px;
+            margin-bottom: 16px;
+            box-shadow: 0 5px 20px rgba(0, 0, 0, 0.06);
+        }
+
+        label {
+            display: block;
+            margin: 14px 0 6px;
+            font-size: 14px;
+            font-weight: 700;
+        }
+
+        input,
+        select,
+        button {
+            width: 100%;
+            min-height: 48px;
+            border-radius: 12px;
+            font: inherit;
+        }
+
+        input,
+        select {
+            border: 1px solid #d1d5db;
+            background: white;
+            padding: 10px 12px;
+            font-size: 16px;
+        }
+
+        input:focus,
+        select:focus {
+            border-color: #2563eb;
+            outline: 3px solid #dbeafe;
+        }
+
+        button {
+            border: 0;
+            cursor: pointer;
+            padding: 11px 14px;
+            font-weight: 700;
+        }
+
+        .primary {
+            background: #2563eb;
+            color: white;
+        }
+
+        .primary:disabled {
+            background: #93c5fd;
+            cursor: wait;
+        }
+
+        .secondary {
+            background: #e5e7eb;
+            color: #111827;
+        }
+
+        .danger {
+            background: #fee2e2;
+            color: #991b1b;
+        }
+
+        .button-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr;
+            gap: 7px;
+            margin-top: 8px;
+        }
+
+        .button-row button {
+            min-height: 42px;
+            padding: 8px;
+        }
+
+        .two-columns {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+        }
+
+        .message {
+            display: none;
+            border-radius: 12px;
+            padding: 12px;
+            margin: 12px 0;
+            font-weight: 600;
+        }
+
+        .success {
+            display: block;
+            background: #dcfce7;
+            color: #166534;
+        }
+
+        .error {
+            display: block;
+            background: #fee2e2;
+            color: #991b1b;
+        }
+
+        .user-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            margin-bottom: 10px;
+        }
+
+        .user-email {
+            color: #4b5563;
+            font-size: 14px;
+            overflow-wrap: anywhere;
+        }
+
+        .user-row button {
+            width: auto;
+            min-height: 38px;
+            padding: 8px 12px;
+        }
+
+        .hidden {
+            display: none !important;
+        }
+
+        .small-note {
+            color: #6b7280;
+            font-size: 13px;
+            line-height: 1.4;
+        }
+
+        .category-buttons {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 7px;
+            margin-top: 8px;
+        }
+
+        .category-buttons button {
+            width: auto;
+            min-height: 40px;
+            padding: 8px 13px;
+            background: #e5e7eb;
+        }
+
+        .category-buttons button.active {
+            background: #dbeafe;
+            color: #1d4ed8;
+            outline: 2px solid #60a5fa;
+        }
+
+        #taskTitle {
+            min-height: 55px;
+            font-size: 18px;
+        }
+
+        @media (max-width: 430px) {
+            .two-columns {
+                grid-template-columns: 1fr;
+                gap: 0;
+            }
+
+            .page {
+                padding-left: 12px;
+                padding-right: 12px;
+            }
+        }
+    </style>
+</head>
+
+<body>
+<div class="page">
+    <div class="header">
+        <h1>Focus Tasks</h1>
+        <p class="subtitle">
+            Quickly send a task to your Windows app.
+        </p>
+    </div>
+
+    <div id="setupError" class="message error hidden"></div>
+
+    <section id="loginCard" class="card">
+        <h2>Sign in</h2>
+
+        <p class="small-note">
+            Use the Focus Tasks user you created in Supabase.
+        </p>
+
+        <label for="email">Email</label>
+        <input
+            id="email"
+            type="email"
+            autocomplete="email"
+            placeholder="you@example.com"
+        >
+
+        <label for="password">Password</label>
+        <input
+            id="password"
+            type="password"
+            autocomplete="current-password"
+            placeholder="Your Focus Tasks password"
+        >
+
+        <div id="loginMessage" class="message"></div>
+
+        <button
+            id="loginButton"
+            class="primary"
+            type="button"
+        >
+            Sign In
+        </button>
+    </section>
+
+    <section id="taskCard" class="card hidden">
+        <div class="user-row">
+            <div>
+                <strong>Phone Quick Add</strong>
+                <div id="userEmail" class="user-email"></div>
+            </div>
+
+            <button
+                id="logoutButton"
+                class="danger"
+                type="button"
+            >
+                Sign Out
+            </button>
+        </div>
+
+        <label for="taskTitle">Task</label>
+        <input
+            id="taskTitle"
+            type="text"
+            placeholder="What do you need to do?"
+            autocomplete="off"
+        >
+
+        <label>Category</label>
+
+        <div class="category-buttons">
+            <button type="button" data-category="Personal">
+                Personal
+            </button>
+
+            <button type="button" data-category="Education">
+                Education
+            </button>
+
+            <button type="button" data-category="Business">
+                Business
+            </button>
+
+            <button type="button" data-category="Content">
+                Content
+            </button>
+
+            <button type="button" data-category="Job">
+                Job
+            </button>
+        </div>
+
+        <label for="category">Category name</label>
+        <input
+            id="category"
+            type="text"
+            value="Personal"
+            list="categorySuggestions"
+        >
+
+        <datalist id="categorySuggestions">
+            <option value="Personal"></option>
+            <option value="Education"></option>
+            <option value="Business"></option>
+            <option value="Content"></option>
+            <option value="Job"></option>
+        </datalist>
+
+        <div class="two-columns">
+            <div>
+                <label for="taskType">Task type</label>
+                <select id="taskType">
+                    <option value="One-time">One-time</option>
+                    <option value="Daily">Daily</option>
+                    <option value="Optional">Optional</option>
+                </select>
+            </div>
+
+            <div>
+                <label for="priority">Priority</label>
+                <select id="priority">
+                    <option value="Auto">Automatic</option>
+                    <option value="Critical">Critical</option>
+                    <option value="Urgent">Urgent</option>
+                    <option value="Medium">Medium</option>
+                    <option value="Low">Low</option>
+                </select>
+            </div>
+        </div>
+
+        <div id="deadlineFields">
+            <label for="dueDate">Deadline date</label>
+            <input id="dueDate" type="date">
+
+            <div class="button-row">
+                <button
+                    id="todayButton"
+                    type="button"
+                    class="secondary"
+                >
+                    Today
+                </button>
+
+                <button
+                    id="tomorrowButton"
+                    type="button"
+                    class="secondary"
+                >
+                    Tomorrow
+                </button>
+
+                <button
+                    id="clearDateButton"
+                    type="button"
+                    class="secondary"
+                >
+                    Clear
+                </button>
+            </div>
+        </div>
+
+        <label id="dueTimeLabel" for="dueTime">
+            Deadline time
+        </label>
+
+        <input
+            id="dueTime"
+            type="time"
+            step="60"
+        >
+
+        <div id="criticalFields">
+            <label for="criticalDate">
+                Critical reminders start on
+            </label>
+
+            <input id="criticalDate" type="date">
+
+            <label for="criticalTime">
+                Critical reminders start at
+            </label>
+
+            <input
+                id="criticalTime"
+                type="time"
+                step="60"
+            >
+        </div>
+
+        <div id="saveMessage" class="message"></div>
+
+        <button
+            id="addTaskButton"
+            type="button"
+            class="primary"
+        >
+            Add Task
+        </button>
+    </section>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
+<script>
+    /*
+       Replace these two values with your own Supabase information.
+       Use the publishable/anon key, never the secret/service-role key.
+    */
+
+    const SUPABASE_URL = "https://fxhbydxxjxtorluwfwmx.supabase.co";
+    const SUPABASE_PUBLISHABLE_KEY =
+        "sb_publishable_JvctfMeyY0hGjUgMpEfMRg_7KcTFnyc";
+
+    let client = null;
+
+    const loginCard = document.getElementById("loginCard");
+    const taskCard = document.getElementById("taskCard");
+    const setupError = document.getElementById("setupError");
+
+    const emailInput = document.getElementById("email");
+    const passwordInput = document.getElementById("password");
+    const loginButton = document.getElementById("loginButton");
+    const loginMessage = document.getElementById("loginMessage");
+
+    const taskTitle = document.getElementById("taskTitle");
+    const categoryInput = document.getElementById("category");
+    const taskType = document.getElementById("taskType");
+    const priority = document.getElementById("priority");
+
+    const deadlineFields =
+        document.getElementById("deadlineFields");
+
+    const dueTimeLabel =
+        document.getElementById("dueTimeLabel");
+
+    const dueDate = document.getElementById("dueDate");
+    const dueTime = document.getElementById("dueTime");
+
+    const criticalFields =
+        document.getElementById("criticalFields");
+
+    const criticalDate =
+        document.getElementById("criticalDate");
+
+    const criticalTime =
+        document.getElementById("criticalTime");
+
+    const addTaskButton =
+        document.getElementById("addTaskButton");
+
+    const saveMessage =
+        document.getElementById("saveMessage");
+
+    function showMessage(element, text, type) {
+        element.textContent = text;
+        element.className = `message ${type}`;
+    }
+
+    function hideMessage(element) {
+        element.textContent = "";
+        element.className = "message hidden";
+    }
+
+    function localDateString(inputDate) {
+        const year = inputDate.getFullYear();
+        const month = String(
+            inputDate.getMonth() + 1
+        ).padStart(2, "0");
+
+        const day = String(
+            inputDate.getDate()
+        ).padStart(2, "0");
+
+        return `${year}-${month}-${day}`;
+    }
+
+    function localDateTimeToISO(
+        dateValue,
+        timeValue,
+        defaultTime
+    ) {
+        if (!dateValue) {
+            return null;
+        }
+
+        const finalTime = timeValue || defaultTime;
+        const localDateTime = new Date(
+            `${dateValue}T${finalTime}:00`
+        );
+
+        return localDateTime.toISOString();
+    }
+
+    function setToday() {
+        dueDate.value = localDateString(new Date());
+
+        if (!dueTime.value) {
+            dueTime.value = "23:59";
+        }
+    }
+
+    function setTomorrow() {
+        const tomorrow = new Date();
+        tomorrow.setDate(tomorrow.getDate() + 1);
+
+        dueDate.value = localDateString(tomorrow);
+
+        if (!dueTime.value) {
+            dueTime.value = "23:59";
+        }
+    }
+
+    function updateTaskTypeFields() {
+        const isDaily = taskType.value === "Daily";
+
+        deadlineFields.classList.toggle(
+            "hidden",
+            isDaily
+        );
+
+        criticalFields.classList.toggle(
+            "hidden",
+            isDaily
+        );
+
+        dueTimeLabel.textContent = isDaily
+            ? "Daily reminder time"
+            : "Deadline time";
+
+        if (isDaily && !dueTime.value) {
+            dueTime.value = "09:00";
+        }
+    }
+
+    function updateCategoryButtons() {
+        const selectedCategory =
+            categoryInput.value.trim().toLowerCase();
+
+        document
+            .querySelectorAll("[data-category]")
+            .forEach((button) => {
+                const buttonCategory =
+                    button.dataset.category.toLowerCase();
+
+                button.classList.toggle(
+                    "active",
+                    buttonCategory === selectedCategory
+                );
+            });
+    }
+
+    async function showLoggedInState(session) {
+        if (!session) {
+            loginCard.classList.remove("hidden");
+            taskCard.classList.add("hidden");
+            return;
+        }
+
+        loginCard.classList.add("hidden");
+        taskCard.classList.remove("hidden");
+
+        document.getElementById("userEmail").textContent =
+            session.user.email || "Signed in";
+
+        taskTitle.focus();
+    }
+
+    async function signIn() {
+        hideMessage(loginMessage);
+
+        const email = emailInput.value.trim();
+        const password = passwordInput.value;
+
+        if (!email || !password) {
+            showMessage(
+                loginMessage,
+                "Enter your email and password.",
+                "error"
+            );
+            return;
+        }
+
+        loginButton.disabled = true;
+        loginButton.textContent = "Signing in…";
+
+        const { data, error } =
+            await client.auth.signInWithPassword({
+                email,
+                password
+            });
+
+        loginButton.disabled = false;
+        loginButton.textContent = "Sign In";
+
+        if (error) {
+            showMessage(
+                loginMessage,
+                error.message,
+                "error"
+            );
+            return;
+        }
+
+        passwordInput.value = "";
+        await showLoggedInState(data.session);
+    }
+
+    async function signOut() {
+        await client.auth.signOut();
+        taskCard.classList.add("hidden");
+        loginCard.classList.remove("hidden");
+    }
+
+    async function addTask() {
+        hideMessage(saveMessage);
+
+        const title = taskTitle.value.trim();
+        const category =
+            categoryInput.value.trim() || "Personal";
+
+        if (!title) {
+            showMessage(
+                saveMessage,
+                "Enter a task name first.",
+                "error"
+            );
+
+            taskTitle.focus();
+            return;
+        }
+
+        const {
+            data: { user }
+        } = await client.auth.getUser();
+
+        if (!user) {
+            showMessage(
+                saveMessage,
+                "Your login expired. Please sign in again.",
+                "error"
+            );
+
+            await signOut();
+            return;
+        }
+
+        let dueAt = null;
+        let criticalAt = null;
+        let preferredTime = null;
+
+        if (taskType.value === "Daily") {
+            preferredTime = dueTime.value || "09:00";
+        } else {
+            dueAt = localDateTimeToISO(
+                dueDate.value,
+                dueTime.value,
+                "23:59"
+            );
+
+            criticalAt = localDateTimeToISO(
+                criticalDate.value,
+                criticalTime.value,
+                "09:00"
+            );
+        }
+
+        addTaskButton.disabled = true;
+        addTaskButton.textContent = "Adding…";
+
+        const { error } = await client
+            .from("phone_tasks")
+            .insert({
+                user_id: user.id,
+                title,
+                category,
+                task_type: taskType.value,
+                priority: priority.value,
+                due_at: dueAt,
+                critical_at: criticalAt,
+                preferred_time: preferredTime
+            });
+
+        addTaskButton.disabled = false;
+        addTaskButton.textContent = "Add Task";
+
+        if (error) {
+            showMessage(
+                saveMessage,
+                error.message,
+                "error"
+            );
+            return;
+        }
+
+        showMessage(
+            saveMessage,
+            "Task sent successfully. It will appear on your PC.",
+            "success"
+        );
+
+        taskTitle.value = "";
+        dueDate.value = "";
+        criticalDate.value = "";
+        criticalTime.value = "";
+
+        if (taskType.value !== "Daily") {
+            dueTime.value = "";
+        }
+
+        taskTitle.focus();
+    }
+
+    function initializePage() {
+        if (
+            SUPABASE_URL.includes("PASTE_") ||
+            SUPABASE_PUBLISHABLE_KEY.includes("PASTE_")
+        ) {
+            setupError.textContent =
+                "The Supabase URL and key have not been added yet.";
+
+            setupError.classList.remove("hidden");
+            loginCard.classList.add("hidden");
+            return;
+        }
+
+        client = window.supabase.createClient(
+            SUPABASE_URL,
+            SUPABASE_PUBLISHABLE_KEY
+        );
+
+        client.auth.getSession().then(({ data }) => {
+            showLoggedInState(data.session);
+        });
+
+        client.auth.onAuthStateChange(
+            (event, session) => {
+                showLoggedInState(session);
+            }
+        );
+
+        loginButton.addEventListener("click", signIn);
+
+        passwordInput.addEventListener(
+            "keydown",
+            (event) => {
+                if (event.key === "Enter") {
+                    signIn();
+                }
+            }
+        );
+
+        document
+            .getElementById("logoutButton")
+            .addEventListener("click", signOut);
+
+        document
+            .getElementById("todayButton")
+            .addEventListener("click", setToday);
+
+        document
+            .getElementById("tomorrowButton")
+            .addEventListener("click", setTomorrow);
+
+        document
+            .getElementById("clearDateButton")
+            .addEventListener("click", () => {
+                dueDate.value = "";
+                dueTime.value = "";
+            });
+
+        addTaskButton.addEventListener(
+            "click",
+            addTask
+        );
+
+        taskType.addEventListener(
+            "change",
+            updateTaskTypeFields
+        );
+
+        categoryInput.addEventListener(
+            "input",
+            updateCategoryButtons
+        );
+
+        document
+            .querySelectorAll("[data-category]")
+            .forEach((button) => {
+                button.addEventListener("click", () => {
+                    categoryInput.value =
+                        button.dataset.category;
+
+                    updateCategoryButtons();
+                });
+            });
+
+        updateTaskTypeFields();
+        updateCategoryButtons();
+    }
+
+    initializePage();
+</script>
+</body>
+</html>
