@@ -418,6 +418,10 @@
             >
         </div>
 
+        <label for="taskFiles">Images or files (optional)</label>
+        <input id="taskFiles" type="file" multiple aria-describedby="fileNote">
+        <p id="fileNote" class="small-note">Up to 5 files, 10 MB each. Files are deleted from cloud storage when you mark the task done on your PC. Cleanup runs when Phone Sync is connected.</p>
+        <ul id="selectedFiles" class="small-note" style="overflow-wrap:anywhere"></ul>
         <div id="saveMessage" class="message"></div>
 
         <button
@@ -442,7 +446,22 @@
     const SUPABASE_PUBLISHABLE_KEY =
         "sb_publishable_JvctfMeyY0hGjUgMpEfMRg_7KcTFnyc";
 
+    const ATTACHMENT_BUCKET = "task-attachments";
+    const MAX_FILE_BYTES = 10 * 1024 * 1024;
+    const taskFiles = document.getElementById("taskFiles");
+    const selectedFiles = document.getElementById("selectedFiles");
     let client = null;
+
+    function showSelectedFiles() {
+        selectedFiles.replaceChildren();
+        for (const file of taskFiles.files) {
+            const item = document.createElement("li");
+            item.textContent = `${file.name} (${(file.size / 1024 / 1024).toFixed(2)} MB)`;
+            selectedFiles.append(item);
+        }
+    }
+
+    taskFiles.addEventListener("change", showSelectedFiles);
 
     const loginCard = document.getElementById("loginCard");
     const taskCard = document.getElementById("taskCard");
@@ -643,102 +662,99 @@
     }
 
     async function addTask() {
+        if (addTaskButton.disabled) return;
         hideMessage(saveMessage);
-
         const title = taskTitle.value.trim();
-        const category =
-            categoryInput.value.trim() || "Personal";
-
+        const category = categoryInput.value.trim() || "Personal";
+        const files = Array.from(taskFiles.files);
         if (!title) {
-            showMessage(
-                saveMessage,
-                "Enter a task name first.",
-                "error"
-            );
-
+            showMessage(saveMessage, "Enter a task name first.", "error");
             taskTitle.focus();
             return;
         }
-
-        const {
-            data: { user }
-        } = await client.auth.getUser();
-
-        if (!user) {
-            showMessage(
-                saveMessage,
-                "Your login expired. Please sign in again.",
-                "error"
-            );
-
-            await signOut();
+        if (files.length > 5 || files.some(file => file.size > MAX_FILE_BYTES)) {
+            showMessage(saveMessage, "Choose up to 5 files, 10 MB or smaller each.", "error");
             return;
         }
-
-        let dueAt = null;
-        let criticalAt = null;
-        let preferredTime = null;
-
-        if (taskType.value === "Daily") {
-            preferredTime = dueTime.value || "09:00";
-        } else {
-            dueAt = localDateTimeToISO(
-                dueDate.value,
-                dueTime.value,
-                "23:59"
-            );
-
-            criticalAt = localDateTimeToISO(
-                criticalDate.value,
-                criticalTime.value,
-                "09:00"
-            );
-        }
-
         addTaskButton.disabled = true;
-        addTaskButton.textContent = "Adding…";
-
-        const { error } = await client
-            .from("phone_tasks")
-            .insert({
-                user_id: user.id,
-                title,
-                category,
-                task_type: taskType.value,
-                priority: priority.value,
-                due_at: dueAt,
-                critical_at: criticalAt,
-                preferred_time: preferredTime
+        taskFiles.disabled = true;
+        document.getElementById("logoutButton").disabled = true;
+        addTaskButton.textContent = "Adding...";
+        let reservedTask = null;
+        let attachments = [];
+        let taskSaved = false;
+        let finalizing = false;
+        try {
+            const { data: { user }, error: authError } = await client.auth.getUser();
+            if (authError || !user) throw new Error("Your login expired. Please sign in again.");
+            const batch = crypto.randomUUID();
+            attachments = files.map(file => {
+                const id = crypto.randomUUID();
+                return {id, name: file.name, size: file.size,
+                    type: file.type || "application/octet-stream",
+                    path: `${user.id}/${batch}/${id}`};
             });
-
-        addTaskButton.disabled = false;
-        addTaskButton.textContent = "Add Task";
-
-        if (error) {
-            showMessage(
-                saveMessage,
-                error.message,
-                "error"
-            );
-            return;
+            const isDaily = taskType.value === "Daily";
+            const { data, error } = await client.from("phone_tasks").insert({
+                user_id: user.id, title, category,
+                task_type: taskType.value, priority: priority.value,
+                due_at: isDaily ? null : localDateTimeToISO(dueDate.value, dueTime.value, "23:59"),
+                critical_at: isDaily ? null : localDateTimeToISO(criticalDate.value, criticalTime.value, "09:00"),
+                preferred_time: isDaily ? (dueTime.value || "09:00") : null,
+                attachments, attachments_ready: files.length === 0
+            }).select("id").single();
+            if (error) throw error;
+            reservedTask = data.id;
+            for (let i = 0; i < files.length; i++) {
+                addTaskButton.textContent = `Uploading ${i + 1} of ${files.length}...`;
+                const { error: uploadError } = await client.storage.from(ATTACHMENT_BUCKET)
+                    .upload(attachments[i].path, files[i], {upsert: false, cacheControl: "0", contentType: attachments[i].type});
+                if (uploadError) throw uploadError;
+            }
+            if (files.length) {
+                finalizing = true;
+                const { error: readyError } = await client.from("phone_tasks")
+                    .update({attachments_ready: true}).eq("id", reservedTask);
+                if (readyError) throw readyError;
+            }
+            taskSaved = true;
+            showMessage(saveMessage, files.length
+                ? "Task and files sent. They will appear on your PC."
+                : "Task sent successfully. It will appear on your PC.", "success");
+            taskTitle.value = "";
+            taskFiles.value = "";
+            showSelectedFiles();
+            dueDate.value = "";
+            criticalDate.value = "";
+            criticalTime.value = "";
+            if (!isDaily) dueTime.value = "";
+            taskTitle.focus();
+        } catch (error) {
+            let cleanupNote = "";
+            if (reservedTask !== null && !taskSaved && attachments.length && !finalizing) {
+                // Keep the reservation until storage deletion succeeds. Phone Sync
+                // retries abandoned reservations after 24 hours, including after a tab closes.
+                try {
+                    const {error: cleanupError} = await client.storage.from(ATTACHMENT_BUCKET)
+                        .remove(attachments.map(file => file.path));
+                    if (cleanupError) throw cleanupError;
+                    const {error: deleteError} = await client.from("phone_tasks")
+                        .delete().eq("id", reservedTask).eq("attachments_ready", false);
+                    if (deleteError) throw deleteError;
+                } catch {
+                    cleanupNote = " Unfinished uploads will be cleaned up by Phone Sync after 24 hours.";
+                }
+            }
+            if (finalizing && !taskSaved) {
+                cleanupNote = " Files uploaded, but task confirmation failed. Check your PC before adding the task again. Phone Sync cleans unfinished uploads after 24 hours.";
+            }
+            showMessage(saveMessage, `Could not send task: ${error.message || error}.${cleanupNote}`, "error");
+        } finally {
+            addTaskButton.disabled = false;
+            taskFiles.disabled = false;
+            document.getElementById("logoutButton").disabled = false;
+            addTaskButton.textContent = "Add Task";
         }
-
-        showMessage(
-            saveMessage,
-            "Task sent successfully. It will appear on your PC.",
-            "success"
-        );
-
-        taskTitle.value = "";
-        dueDate.value = "";
-        criticalDate.value = "";
-        criticalTime.value = "";
-
-        if (taskType.value !== "Daily") {
-            dueTime.value = "";
-        }
-
-        taskTitle.focus();
     }
 
     function initializePage() {
